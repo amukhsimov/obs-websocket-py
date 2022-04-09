@@ -8,6 +8,7 @@ import logging
 import socket
 import threading
 import websocket
+import time
 
 from . import exceptions
 from . import base_classes
@@ -42,6 +43,7 @@ class obsws:
         """
         self.id = 1
         self.thread_recv = None
+        self.thread_trigger = None
         self.ws = None
         self.eventmanager = EventManager()
         self.events = {}
@@ -148,6 +150,10 @@ class obsws:
         self.thread_recv.daemon = True
         self.thread_recv.start()
 
+        self.thread_trigger = TriggerThread(self)
+        self.thread_trigger.daemon = True
+        self.thread_trigger.start()
+
     def call(self, obj):
         """
         Make a call to the OBS server through the Websocket.
@@ -211,6 +217,21 @@ class obsws:
         """
         self.eventmanager.unregister(func, event)
 
+class TriggerThread(threading.Thread):
+    def __init__(self, core):
+        self.core = core
+        self.running = True
+        self.events = []
+        threading.Thread.__init__(self)
+
+    def append_event(self, obj):
+        self.events.append(obj)
+
+    def run(self):
+        while self.running:
+            for obj in self.events:
+                self.core.eventmanager.trigger(obj)
+            self.events.clear()
 
 class RecvThread(threading.Thread):
 
@@ -234,7 +255,8 @@ class RecvThread(threading.Thread):
                 if 'update-type' in result:
                     LOG.debug(u"Got message: {}".format(result))
                     obj = self.build_event(result)
-                    self.core.eventmanager.trigger(obj)
+                    # self.core.eventmanager.trigger(obj)
+                    self.core.thread_trigger.append_event(obj)
                 elif 'message-id' in result:
                     LOG.debug(u"Got answer for id {}: {}".format(result['message-id'], result))
                     if result['message-id'] in self.core.events:
