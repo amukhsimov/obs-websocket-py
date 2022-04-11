@@ -97,6 +97,7 @@ class obsws:
         LOG.info("Disconnecting...")
         if self.thread_recv is not None:
             self.thread_recv.running = False
+            self.thread_trigger.running = False
 
         try:
             self.ws.close()
